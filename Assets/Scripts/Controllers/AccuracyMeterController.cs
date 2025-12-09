@@ -4,36 +4,22 @@ using UnityEngine.UI;
 [RequireComponent(typeof(Slider))]
 public class AccuracyMeterController : MonoBehaviour {
     [Header("Dependencies")]
-    [Tooltip("The background image component of the Slider (the part that will change colors).")]
     public Image sliderBackground;
 
     [Header("Events")]
-    [Tooltip("Listen for SPACE (Lock) to stop the meter.")]
     public VoidEventChannelSO onAccuracyCapture;
-
-    [Tooltip("Send the calculated accuracy to the State Manager.")]
     public FloatEventChannelSO onAccuracyValueSet;
 
-    [Tooltip("Reset the meter when delivery is done.")]
-    public VoidEventChannelSO onDeliveryFinished;
-
     [Header("Configuration")]
-    [Range(0.1f, 5f)]
-    public float oscillationSpeed = 1.5f;
-
-    // Define the "Half-Width" of the zones from the center (0.5)
-    // 0.5 is Center. 
-    // If Perfect is 0.05, it covers 0.45 to 0.55.
-    [Header("Zones (Half-Width from Center)")]
-    [Range(0f, 0.5f)] public float perfectThreshold = 0.05f; // Blue
-    [Range(0f, 0.5f)] public float goodThreshold = 0.15f;    // Green
-    [Range(0f, 0.5f)] public float okayThreshold = 0.30f;    // Yellow
-    // Anything > okayThreshold is Red
+    [Range(0.1f, 5f)] public float oscillationSpeed = 1.5f;
+    [Range(0f, 0.5f)] public float perfectThreshold = 0.05f;
+    [Range(0f, 0.5f)] public float goodThreshold = 0.15f;
+    [Range(0f, 0.5f)] public float okayThreshold = 0.30f;
 
     [Header("Colors")]
-    public Color perfectColor = new Color(0f, 0.4f, 1f); // Nice Blue
+    public Color perfectColor = new Color(0f, 0.4f, 1f);
     public Color goodColor = Color.green;
-    public Color okayColor = new Color(1f, 0.8f, 0f); // Gold/Yellow
+    public Color okayColor = new Color(1f, 0.8f, 0f);
     public Color badColor = Color.red;
 
     private Slider _slider;
@@ -45,15 +31,24 @@ public class AccuracyMeterController : MonoBehaviour {
 
     void Start() {
         GenerateMeterVisuals();
-        ResetMeter(); // Start running
+        // Default to not running until UI Controller activates it
+        _isRunning = false;
 
         if(onAccuracyCapture != null) onAccuracyCapture.OnEventRaised += StopAndCapture;
-        if(onDeliveryFinished != null) onDeliveryFinished.OnEventRaised += ResetMeter;
     }
 
     void OnDestroy() {
         if(onAccuracyCapture != null) onAccuracyCapture.OnEventRaised -= StopAndCapture;
-        if(onDeliveryFinished != null) onDeliveryFinished.OnEventRaised -= ResetMeter;
+    }
+
+    // Called by BowlingUIController to start/stop the logic
+    public void SetMeterActive(bool isActive) {
+        if(isActive) {
+            _isRunning = true;
+            _slider.value = 0; // Reset position
+        } else {
+            _isRunning = false;
+        }
     }
 
     void Update() {
@@ -68,42 +63,21 @@ public class AccuracyMeterController : MonoBehaviour {
 
         _isRunning = false;
 
-        // Calculate Accuracy Logic
-        // 0.5 is the target. Calculate distance from 0.5
+        // Calculate Score
         float distanceFromCenter = Mathf.Abs(_slider.value - 0.5f);
-
-        // Map distance to a 0-1 score (1 is perfect, 0 is furthest away)
-        // We can use the thresholds to determine "tiers" or a raw float.
-        // Here we return a raw float adjusted by difficulty, but snapped for logic.
-
         float accuracyScore = 0f;
 
-        if(distanceFromCenter <= perfectThreshold) {
-            accuracyScore = 1.0f; // Perfect
-            Debug.Log("Accuracy: PERFECT (Blue)");
-        } else if(distanceFromCenter <= goodThreshold) {
-            accuracyScore = 0.70f; // Good
-            Debug.Log("Accuracy: GOOD (Green)");
-        } else if(distanceFromCenter <= okayThreshold) {
-            accuracyScore = 0.40f; // Okay
-            Debug.Log("Accuracy: OKAY (Yellow)");
-        } else {
-            accuracyScore = 0.10f; // Bad/No Ball
-            Debug.Log("Accuracy: BAD (Red)");
-        }
+        if(distanceFromCenter <= perfectThreshold) accuracyScore = 1.0f;
+        else if(distanceFromCenter <= goodThreshold) accuracyScore = 0.70f;
+        else if(distanceFromCenter <= okayThreshold) accuracyScore = 0.40f;
+        else accuracyScore = 0.10f;
 
-        // Raise the event so StateManager knows the value
+        // Notify Listeners (UI Controller will see this and show Bowl button)
         if(onAccuracyValueSet != null) {
             onAccuracyValueSet.RaiseEvent(accuracyScore);
         }
     }
 
-    private void ResetMeter() {
-        _isRunning = true;
-        _slider.value = 0;
-    }
-
-    // --- Procedural Texture Generation ---
     [ContextMenu("Refresh Visuals")]
     public void GenerateMeterVisuals() {
         if(sliderBackground == null) return;
@@ -115,7 +89,6 @@ public class AccuracyMeterController : MonoBehaviour {
         texture.filterMode = FilterMode.Bilinear;
 
         for(int y = 0; y < height; y++) {
-            // Normalized Y (0 to 1)
             float t = (float)y / (height - 1);
             float dist = Mathf.Abs(t - 0.5f);
             Color col = badColor;
@@ -128,8 +101,6 @@ public class AccuracyMeterController : MonoBehaviour {
         }
 
         texture.Apply();
-
-        Sprite gradientSprite = Sprite.Create(texture, new Rect(0, 0, width, height), new Vector2(0.5f, 0.5f));
-        sliderBackground.sprite = gradientSprite;
+        sliderBackground.sprite = Sprite.Create(texture, new Rect(0, 0, width, height), new Vector2(0.5f, 0.5f));
     }
 }
