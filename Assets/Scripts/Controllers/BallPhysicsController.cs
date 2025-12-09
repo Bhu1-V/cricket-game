@@ -1,76 +1,126 @@
 using UnityEngine;
 
-// Manages the ball's Rigidbody and applies continuous physics updates.
 [RequireComponent(typeof(Rigidbody))]
+[RequireComponent(typeof(LineRenderer))] // Added LineRenderer dependency
 public class BallPhysicsController : MonoBehaviour {
     private Rigidbody _rb;
+    private LineRenderer _lineRenderer; // Reference to the LineRenderer
     private BowlingStateManager _stateManager;
     private IBowlingType _currentDeliveryType;
-    private Vector3 _currentSwingDirection;
-    private Vector3 _currentSpinDirection;
+
+    private Vector3 _currentControlInput;
     private float _accuracy;
 
-    // Enum to represent the ball's current flight state
+    [Header("Debug Settings")]
+    public bool debugMode = true; // Toggle this in Inspector
+    public Color debugLineColor = Color.red;
+    [Range(0.05f, 0.5f)] public float debugLineWidth = 0.1f;
+
     public enum BallState { Idle, MidAir, Bounced, Finished }
     public BallState CurrentState { get; set; }
 
     void Awake() {
         _rb = GetComponent<Rigidbody>();
-        _stateManager = FindObjectsByType<BowlingStateManager>(FindObjectsSortMode.None)[0]; // Get the manager
+        _rb.useGravity = false; // We use manual gravity
+        _rb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
 
-        // Ensure Rigidbody is configured for physics
-        _rb.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
+        _stateManager = FindAnyObjectByType<BowlingStateManager>();
 
-        CurrentState = BallState.Idle;
+        // --- Setup LineRenderer Defaults ---
+        _lineRenderer = GetComponent<LineRenderer>();
+        _lineRenderer.startWidth = debugLineWidth;
+        _lineRenderer.endWidth = debugLineWidth;
+        _lineRenderer.positionCount = 0;
+
+        // Simple default material for the line so it is visible immediately
+        Material lineMat = new Material(Shader.Find("Sprites/Default"));
+        _lineRenderer.material = lineMat;
+        _lineRenderer.startColor = debugLineColor;
+        _lineRenderer.endColor = debugLineColor;
     }
 
-    // Public method called by the State Manager to start the bowl.
-    public void StartDelivery(IBowlingType deliveryType, float accuracy, Vector3 swingDirection, Vector3 spinDirection, Vector3 initialVelocity) {
+    public void StartDelivery(IBowlingType deliveryType, float accuracy, Vector3 controlInput, Vector3 initialVelocity) {
         _currentDeliveryType = deliveryType;
         _accuracy = accuracy;
-        _currentSwingDirection = swingDirection;
-        _currentSpinDirection = spinDirection;
+        _currentControlInput = controlInput;
 
-        // Reset and prepare the ball
+        // Clear the debug path for the new delivery
+        if(_lineRenderer != null) {
+            _lineRenderer.positionCount = 0;
+        }
+
         CurrentState = BallState.MidAir;
         _rb.isKinematic = false;
-        _rb.linearVelocity = Vector3.zero;
+        _rb.linearVelocity = initialVelocity;
         _rb.angularVelocity = Vector3.zero;
-
-        // Apply initial forces using the specific bowling type implementation
-        _currentDeliveryType.ApplyInitialForce(_rb, initialVelocity, Vector3.up, _accuracy);
     }
 
     void FixedUpdate() {
         if(CurrentState == BallState.MidAir) {
-            // OCP: Call the current delivery type's mid-air logic.
-            _currentDeliveryType.ApplyMidAirPhysics(_rb, _accuracy, _currentSwingDirection);
-        } else if(CurrentState == BallState.Bounced) {
-            // Apply continuous post-bounce effects if needed (e.g., continued friction/spin decay)
-        }
+            // Track Path
+            if(debugMode) AddDebugPoint();
 
-        // Simple simulation of gravity for the ball (always on unless kinematic)
-        // _rb.AddForce(Vector3.down * 9.81f, ForceMode.Acceleration); // Already handled by default physics settings
+            // 1. Manual Gravity
+            _rb.AddForce(Vector3.up * _stateManager.config.gravity, ForceMode.Acceleration);
+
+            // 2. Apply Mid-Air Swing/Drift
+            _currentDeliveryType.ApplyMidAirPhysics(_rb, _accuracy, _currentControlInput);
+
+        } else if(CurrentState == BallState.Bounced) {
+            // Track Path
+            if(debugMode) AddDebugPoint();
+
+            // Continue applying gravity after bounce
+            _rb.AddForce(Vector3.up * _stateManager.config.gravity, ForceMode.Acceleration);
+        }
+    }
+
+    private void AddDebugPoint() {
+        if(_lineRenderer == null) return;
+
+        // Add a new point to the end of the line
+        _lineRenderer.positionCount++;
+        _lineRenderer.SetPosition(_lineRenderer.positionCount - 1, transform.position);
     }
 
     void OnCollisionEnter(Collision collision) {
+        // Prevent double-bounce logic or hitting erroneous triggers
+        if(CurrentState == BallState.Bounced && collision.gameObject.TryGetComponent(out IWicket w) || collision.gameObject.TryGetComponent(out IBoundary b)) {
+                Debug.Log("BallPhysicsController: Ball Stopped on Either Wicket or Boundary");
+                StopBall();
+        } 
+        
         if(CurrentState != BallState.MidAir) return;
 
-        // Assume the pitch tag is set correctly
-        if(collision.gameObject.CompareTag("Pitch")) {
+        // Check for Pitch
+        if(collision.gameObject.TryGetComponent(out IPitch pitch)) {
+            Debug.Log("BallPhysicsController: Ball bounced on pitch.");
             CurrentState = BallState.Bounced;
 
-            // Apply bounce physics (restitution/friction)
-            ContactPoint contact = collision.contacts[0];
+            // --- MANUAL BOUNCE CALCULATION ---
+            Vector3 incomingVel = collision.relativeVelocity * -1f;
+            Vector3 normal = collision.contacts[0].normal;
 
-            // OCP: Call the current delivery type's bounce logic.
-            _currentDeliveryType.HandleBouncePhysics(_rb, contact.normal, _accuracy, _currentSpinDirection);
+            // 1. Standard Reflection
+            Vector3 reflected = Vector3.Reflect(incomingVel, normal);
 
-            // Notify the State Manager that the bounce occurred
+            // 2. Delegate to Delivery Type (Apply Swing Tangent / Spin Turn)
+            Vector3 finalVel = _currentDeliveryType.HandleBouncePhysics(reflected, normal, _accuracy, _currentControlInput);
+
+            // 3. Apply Global Bounciness (Y-axis only)
+            finalVel.y *= _stateManager.config.restitution;
+
+            // 4. Apply
+            _rb.linearVelocity = finalVel;
+
             _stateManager.OnBallBounce();
-        } else if(collision.gameObject.CompareTag("Stumps") || collision.gameObject.CompareTag("Boundary")) {
-            CurrentState = BallState.Finished;
-            _stateManager.OnDeliveryFinished();
         }
+    }
+
+    private void StopBall() {
+        CurrentState = BallState.Finished;
+        _rb.linearVelocity = Vector3.zero;
+        _rb.isKinematic = true;
+        _stateManager.OnDeliveryFinished();
     }
 }

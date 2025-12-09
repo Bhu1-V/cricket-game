@@ -109,6 +109,15 @@ public partial class @BallControls: IInputActionCollection2, IDisposable
                     ""processors"": """",
                     ""interactions"": """",
                     ""initialStateCheck"": false
+                },
+                {
+                    ""name"": ""SelectAccuracy"",
+                    ""type"": ""Button"",
+                    ""id"": ""51f6dbd6-598d-4d8c-9a55-d310ae1423fc"",
+                    ""expectedControlType"": """",
+                    ""processors"": """",
+                    ""interactions"": """",
+                    ""initialStateCheck"": false
                 }
             ],
             ""bindings"": [
@@ -247,33 +256,22 @@ public partial class @BallControls: IInputActionCollection2, IDisposable
                 {
                     ""name"": """",
                     ""id"": ""eb40bb66-4559-4dfa-9a2f-820438abb426"",
+                    ""path"": ""<Keyboard>/enter"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": ""Keyboard&Mouse;Gamepad"",
+                    ""action"": ""Bowl"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": false
+                },
+                {
+                    ""name"": """",
+                    ""id"": ""79aa0369-caa7-4ff9-b63a-2d01dd15fc74"",
                     ""path"": ""<Keyboard>/space"",
                     ""interactions"": """",
                     ""processors"": """",
-                    ""groups"": ""Keyboard&Mouse"",
-                    ""action"": ""Bowl"",
-                    ""isComposite"": false,
-                    ""isPartOfComposite"": false
-                },
-                {
-                    ""name"": """",
-                    ""id"": ""daba33a1-ad0c-4742-a909-43ad1cdfbeb6"",
-                    ""path"": ""<Gamepad>/buttonSouth"",
-                    ""interactions"": """",
-                    ""processors"": """",
-                    ""groups"": ""Gamepad"",
-                    ""action"": ""Bowl"",
-                    ""isComposite"": false,
-                    ""isPartOfComposite"": false
-                },
-                {
-                    ""name"": """",
-                    ""id"": ""603f3daf-40bd-4854-8724-93e8017f59e3"",
-                    ""path"": ""<XRController>/secondaryButton"",
-                    ""interactions"": """",
-                    ""processors"": """",
-                    ""groups"": ""XR"",
-                    ""action"": ""Bowl"",
+                    ""groups"": """",
+                    ""action"": ""SelectAccuracy"",
                     ""isComposite"": false,
                     ""isPartOfComposite"": false
                 }
@@ -863,6 +861,7 @@ public partial class @BallControls: IInputActionCollection2, IDisposable
         m_Ball = asset.FindActionMap("Ball", throwIfNotFound: true);
         m_Ball_Move = m_Ball.FindAction("Move", throwIfNotFound: true);
         m_Ball_Bowl = m_Ball.FindAction("Bowl", throwIfNotFound: true);
+        m_Ball_SelectAccuracy = m_Ball.FindAction("SelectAccuracy", throwIfNotFound: true);
         // UI
         m_UI = asset.FindActionMap("UI", throwIfNotFound: true);
         m_UI_Navigate = m_UI.FindAction("Navigate", throwIfNotFound: true);
@@ -958,6 +957,7 @@ public partial class @BallControls: IInputActionCollection2, IDisposable
     private List<IBallActions> m_BallActionsCallbackInterfaces = new List<IBallActions>();
     private readonly InputAction m_Ball_Move;
     private readonly InputAction m_Ball_Bowl;
+    private readonly InputAction m_Ball_SelectAccuracy;
     /// <summary>
     /// Provides access to input actions defined in input action map "Ball".
     /// </summary>
@@ -977,6 +977,10 @@ public partial class @BallControls: IInputActionCollection2, IDisposable
         /// Provides access to the underlying input action "Ball/Bowl".
         /// </summary>
         public InputAction @Bowl => m_Wrapper.m_Ball_Bowl;
+        /// <summary>
+        /// Provides access to the underlying input action "Ball/SelectAccuracy".
+        /// </summary>
+        public InputAction @SelectAccuracy => m_Wrapper.m_Ball_SelectAccuracy;
         /// <summary>
         /// Provides access to the underlying input action map instance.
         /// </summary>
@@ -1009,6 +1013,9 @@ public partial class @BallControls: IInputActionCollection2, IDisposable
             @Bowl.started += instance.OnBowl;
             @Bowl.performed += instance.OnBowl;
             @Bowl.canceled += instance.OnBowl;
+            @SelectAccuracy.started += instance.OnSelectAccuracy;
+            @SelectAccuracy.performed += instance.OnSelectAccuracy;
+            @SelectAccuracy.canceled += instance.OnSelectAccuracy;
         }
 
         /// <summary>
@@ -1026,6 +1033,9 @@ public partial class @BallControls: IInputActionCollection2, IDisposable
             @Bowl.started -= instance.OnBowl;
             @Bowl.performed -= instance.OnBowl;
             @Bowl.canceled -= instance.OnBowl;
+            @SelectAccuracy.started -= instance.OnSelectAccuracy;
+            @SelectAccuracy.performed -= instance.OnSelectAccuracy;
+            @SelectAccuracy.canceled -= instance.OnSelectAccuracy;
         }
 
         /// <summary>
@@ -1340,6 +1350,13 @@ public partial class @BallControls: IInputActionCollection2, IDisposable
         /// <seealso cref="UnityEngine.InputSystem.InputAction.performed" />
         /// <seealso cref="UnityEngine.InputSystem.InputAction.canceled" />
         void OnBowl(InputAction.CallbackContext context);
+        /// <summary>
+        /// Method invoked when associated input action "SelectAccuracy" is either <see cref="UnityEngine.InputSystem.InputAction.started" />, <see cref="UnityEngine.InputSystem.InputAction.performed" /> or <see cref="UnityEngine.InputSystem.InputAction.canceled" />.
+        /// </summary>
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.started" />
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.performed" />
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.canceled" />
+        void OnSelectAccuracy(InputAction.CallbackContext context);
     }
     /// <summary>
     /// Interface to implement callback methods for all input action callbacks associated with input actions defined by "UI" which allows adding and removing callbacks.

@@ -8,74 +8,82 @@ public class InputReaderChannel : MonoBehaviour, BallControls.IBallActions {
     [Tooltip("Vector2 for continuous marker movement (X/Z axes). Consumed by BounceMarkerController.")]
     public Vector2EventChannelSO onMoveMarker;
 
-    [Tooltip("Raised on Tap 1: Signals the Accuracy Meter to stop and capture its value.")]
+    [Tooltip("Raised on SPACE: Signals the Accuracy Meter to stop and the Marker to lock.")]
     public VoidEventChannelSO onAccuracyCapture;
 
-    [Tooltip("Raised on Tap 2: Signals the State Manager to execute the bowl. Consumed by BowlingStateManager.")]
+    [Tooltip("Raised on ENTER: Signals the State Manager to execute the bowl.")]
     public VoidEventChannelSO onBowlTriggered;
 
     [Header("Event Input Channels (Listening)")]
-    [Tooltip("Listens for the final accuracy value after Tap 1. Raised by the Accuracy Meter.")]
+    [Tooltip("Listens for the final accuracy value. Raised by the Accuracy Meter.")]
     public FloatEventChannelSO onAccuracyValueSet;
 
     private BallControls _controls;
-    private bool _isAccuracyCaptured = false;
-    private float _capturedAccuracyValue = 0f;
+    private bool _isLocked = false;
 
     // --- Unity Lifecycle ---
     private void OnEnable() {
         if(_controls == null) {
             _controls = new BallControls();
-            // Implement the IBallActions interface callbacks
             _controls.Ball.SetCallbacks(this);
         }
         _controls.Ball.Enable();
 
-        // Subscribe to the accuracy result from the (simulated) Accuracy Meter
-        onAccuracyValueSet.OnEventRaised += HandleAccuracyCaptured;
+        // Listen for reset/cleanup if needed, or handle internal state locally
+        if(onAccuracyValueSet != null)
+            onAccuracyValueSet.OnEventRaised += HandleAccuracyCaptured;
     }
 
     private void OnDisable() {
         _controls.Ball.Disable();
-        onAccuracyValueSet.OnEventRaised -= HandleAccuracyCaptured;
+        if(onAccuracyValueSet != null)
+            onAccuracyValueSet.OnEventRaised -= HandleAccuracyCaptured;
     }
 
     // --- IBallActions Implementation ---
 
-    // 1. Movement Input Handler (Maps Input System to SO Event)
+    // 1. Movement (WASD / Stick)
     public void OnMove(InputAction.CallbackContext context) {
-        // Continuous input reading for the marker position
+        if(_isLocked) return; // Prevent movement if we have already locked the target
+
         if(context.performed || context.started || context.canceled) {
-            // Raise the Vector2 event channel for the BounceMarkerController to consume
             onMoveMarker.RaiseEvent(context.ReadValue<Vector2>());
         }
     }
 
-    // 2. Bowl Input Handler (Manages Two-Tap State)
-    public void OnBowl(InputAction.CallbackContext context) {
-        // We only care about the performed (tap/button press) phase
+    // 2. Select Accuracy (SPACE) - Locks everything
+    public void OnSelectAccuracy(InputAction.CallbackContext context) {
         if(!context.performed) return;
 
-        if(!_isAccuracyCaptured) {
-            // --- TAP 1: Capture Accuracy ---
-            Debug.Log("Tap 1: Capturing Accuracy. Meter should stop now.");
+        if(!_isLocked) {
+            Debug.Log("Input: SPACE pressed. Locking Accuracy and Marker.");
             onAccuracyCapture.RaiseEvent();
-            // State waits for HandleAccuracyCaptured event before allowing Tap 2
-        } else {
-            // --- TAP 2: Execute Bowl ---
-            Debug.Log($"Tap 2: Executing Bowl with Accuracy: {_capturedAccuracyValue:F2}");
-            onBowlTriggered.RaiseEvent();
-
-            // Reset state for the next delivery
-            _isAccuracyCaptured = false;
-            _capturedAccuracyValue = 0f;
+            // We set _isLocked to true locally, but usually we wait for the confirmation events
+            // For responsiveness, we lock input immediately here.
+            _isLocked = true;
         }
     }
 
-    // Called when the FloatEventChannelSO is raised by the Accuracy Meter
-    private void HandleAccuracyCaptured(float accuracy) {
-        _capturedAccuracyValue = accuracy;
-        _isAccuracyCaptured = true;
-        Debug.Log($"Accuracy captured: {accuracy:F2}. Waiting for Tap 2.");
+    // 3. Bowl (ENTER) - Executes the delivery
+    public void OnBowl(InputAction.CallbackContext context) {
+        if(!context.performed) return;
+
+        if(_isLocked) {
+            Debug.Log("Input: ENTER pressed. Triggering Bowl.");
+            onBowlTriggered.RaiseEvent();
+        } else {
+            Debug.LogWarning("Input: ENTER pressed, but Accuracy/Marker not locked yet. Press SPACE first.");
+        }
+    }
+
+    // Reset state when the delivery cycle is effectively "confirmed" or finished
+    // You might want to subscribe to onDeliveryFinished in a real scenario to reset _isLocked = false;
+    private void HandleAccuracyCaptured(float val) {
+        _isLocked = true;
+    }
+
+    // Optional: Call this from an external manager when the turn resets
+    public void ResetInputState() {
+        _isLocked = false;
     }
 }

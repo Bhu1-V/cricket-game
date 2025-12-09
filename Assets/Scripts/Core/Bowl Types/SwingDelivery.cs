@@ -9,33 +9,43 @@ public class SwingDelivery : IBowlingType {
     }
 
     public void ApplyInitialForce(Rigidbody ball, Vector3 initialVelocity, Vector3 pitchUpVector, float accuracy) {
-        // For swing, ensure minimal or no initial spin
-        ball.angularVelocity = Vector3.zero;
-        ball.linearVelocity = initialVelocity;
-
-        // Add realistic drag
-        ball.linearDamping = _config.airDragMultiplier;
+        ball.linearDamping = _config.airDrag;
     }
 
-    // Mid-Air: Applies a consistent lateral force based on swing direction and accuracy.
     public void ApplyMidAirPhysics(Rigidbody ball, float accuracy, Vector3 swingDirection) {
-        // Calculate the maximum possible swing force based on the current speed
-        float speedFactor = ball.linearVelocity.magnitude / 30f; // Normalize speed
-        float maxForce = _config.maxSwingForce * speedFactor;
-
-        // Force strength is proportional to the player's accuracy (closer to 1.0 is better)
-        // We use accuracy to modify the effective magnitude of the force.
-        float effectiveAccuracy = Mathf.Lerp(0.2f, 1.0f, accuracy);
-
-        // Swing force is perpendicular to the velocity and proportional to accuracy
-        Vector3 swingForce = Vector3.Cross(ball.linearVelocity.normalized, swingDirection).normalized * maxForce * effectiveAccuracy;
-
-        ball.AddForce(swingForce, ForceMode.Acceleration);
+        // Continuous Force in global X (Magnus Effect)
+        // This causes the ball to curve IN THE AIR.
+        float swingMag = swingDirection.x * _config.maxSwingForce * accuracy;
+        ball.AddForce(new Vector3(swingMag, 0, 0), ForceMode.Force);
     }
 
-    // Post-Bounce: Swing relies mostly on the physics engine and typically has minimal manual post-bounce adjustment.
-    public void HandleBouncePhysics(Rigidbody ball, Vector3 collisionNormal, float accuracy, Vector3 spinDirection) {
-        // The bounce physics are mainly handled by the Rigidbody and the Physics Material.
-        // The result of a good swing is movement in the air, not a dramatic change after bounce.
+    public Vector3 HandleBouncePhysics(Vector3 reflectedVelocity, Vector3 collisionNormal, float accuracy, Vector3 swingDirection) {
+        // TANGENTIAL CONTINUATION LOGIC
+
+        // 1. Separate Vertical (Y) and Horizontal (XZ) components
+        // We preserve Y explicitly so the BallPhysicsController can handle bounce height via Restitution.
+        // If we apply friction to Y here, it double-dampens the bounce, causing the "rolling" issue.
+        float bounceY = reflectedVelocity.y;
+        Vector3 flatVelocity = new Vector3(reflectedVelocity.x, 0, reflectedVelocity.z);
+
+        // 2. Calculate the current angle of travel relative to straight forward
+        // (If ball is moving Right, angle is positive)
+        float currentAngle = Vector3.SignedAngle(Vector3.forward, flatVelocity, Vector3.up);
+
+        // 3. Exaggerate this angle (The "Cut")
+        // If the ball was swinging Right (positive angle), we want it to go MORE Right.
+        // We multiply the angle to sharpen the path based on the incoming trajectory arc.
+        float nipFactor = 1.5f; // How much sharper the bounce is
+        float newAngle = currentAngle * (1f + (nipFactor * accuracy));
+
+        // 4. Create new direction from this angle
+        Quaternion rotation = Quaternion.Euler(0, newAngle - currentAngle, 0); // Rotate by the difference
+        Vector3 finalFlatVelocity = rotation * flatVelocity;
+
+        // 5. Apply standard friction ONLY to the horizontal speed (Skidding)
+        finalFlatVelocity *= (1f - _config.pitchFriction);
+
+        // 6. Recombine with the original vertical bounce
+        return new Vector3(finalFlatVelocity.x, bounceY, finalFlatVelocity.z);
     }
 }

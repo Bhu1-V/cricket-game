@@ -1,27 +1,24 @@
 using UnityEngine;
 
 [CreateAssetMenu(fileName = "BowlingConfig", menuName = "Cricket/Bowling Config", order = 1)]
-// Configuration data for all bowling physics constants.
 public class BowlingConfig : ScriptableObject {
-    [Header("General Physics")]
-    [Tooltip("The time (in seconds) the ball takes to travel from the bowler to the bounce marker.")]
-    public float timeToTarget = 0.6f;
-    [Tooltip("Global air drag multiplier.")]
-    public float airDragMultiplier = 0.5f;
-    [Tooltip("How much the ball loses velocity after bouncing (0.0 to 1.0).")]
-    public float restitution = 0.6f;
-    [Tooltip("Friction applied to the ball on collision with the pitch.")]
-    public float pitchFriction = 0.8f;
+    [Header("Speed Settings (m/s)")]
+    public float minBallSpeed = 18f;
+    public float maxBallSpeed = 45f;
 
-    [Header("Swing Delivery")]
-    [Tooltip("Max lateral force applied during mid-air swing (proportional to velocity).")]
-    public float maxSwingForce = 5.0f;
+    [Header("Physics Constants")]
+    public float gravity = -9.81f;
+    public float airDrag = 0.1f; // Low drag to keep speed up
 
-    [Header("Spin Delivery")]
-    [Tooltip("Initial angular velocity applied to a spin ball (e.g., RPM).")]
-    public float initialSpinRate = 80.0f;
-    [Tooltip("Multiplier for the Magnuss effect (lift due to spin and velocity)")]
-    public float magnusEffectMultiplier = 0.05f;
-    [Tooltip("Max instantaneous deviation force applied upon bounce.")]
-    public float maxPostBounceSpinForce = 15.0f;
+    [Header("Bounciness")]
+    [Range(0f, 1f)] public float restitution = 0.75f; // Good bounce
+    [Range(0f, 1f)] public float pitchFriction = 0.1f; // Low friction for skidding
+
+    [Header("Swing Settings")]
+    [Tooltip("Force applied sideways. Higher = More Curve.")]
+    public float maxSwingForce = 45.0f; // Increased for visibility
+
+    [Header("Spin Settings")]
+    public float maxSpinTurnAngle = 35.0f;
+    public float driftForce = 8.0f;
 }

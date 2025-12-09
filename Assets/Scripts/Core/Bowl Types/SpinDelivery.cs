@@ -9,36 +9,32 @@ public class SpinDelivery : IBowlingType {
     }
 
     public void ApplyInitialForce(Rigidbody ball, Vector3 initialVelocity, Vector3 pitchUpVector, float accuracy) {
-        // Initial velocity is set by the State Manager
-        ball.linearVelocity = initialVelocity;
-
-        // Use a high initial angular velocity to simulate spin, slightly randomized by accuracy.
-        float effectiveSpin = Mathf.Lerp(_config.initialSpinRate * 0.8f, _config.initialSpinRate * 1.2f, accuracy);
-
-        // The spin direction is implicitly set by the spinDirection parameter passed in the HandleBouncePhysics, 
-        // but here we set a generic topspin/sidespin to simulate the flight.
-        // We need a pre-calculated spin vector here. For this example, we assume the ball rotates along its axis of travel.
-        ball.angularVelocity = new Vector3(effectiveSpin, 0, 0);
-
-        // Low air drag, as spin deliveries are often slower
-        ball.linearDamping = _config.airDragMultiplier * 0.5f;
+        // Higher drag for spin to allow for loopier trajectories if needed
+        ball.linearDamping = _config.airDrag * 1.2f;
     }
 
-    // Mid-Air: Applies the Magnus Effect (lift force due to spin).
     public void ApplyMidAirPhysics(Rigidbody ball, float accuracy, Vector3 swingDirection) {
-        // Magnus force (F_mag = c * v x w) is perpendicular to both velocity (v) and angular velocity (w)
-        Vector3 magnusForce = Vector3.Cross(ball.linearVelocity, ball.angularVelocity) * _config.magnusEffectMultiplier;
-
-        // Apply the force proportional to accuracy (a more accurate bowl maintains better spin)
-        ball.AddForce(magnusForce * accuracy, ForceMode.Acceleration);
+        // NO Mid-Air Drift for Spin (Per user request: "Thrown straight onto the bounce Marker")
+        // We leave this empty. The ball travels in a straight line (projectile motion).
     }
 
-    // Post-Bounce: Applies a force proportional to accuracy and the intended spin direction.
-    public void HandleBouncePhysics(Rigidbody ball, Vector3 collisionNormal, float accuracy, Vector3 spinDirection) {
-        // Calculate the direction vector for the "turn" after bounce
-        Vector3 deviationForce = spinDirection.normalized * _config.maxPostBounceSpinForce * accuracy;
+    public Vector3 HandleBouncePhysics(Vector3 reflectedVelocity, Vector3 collisionNormal, float accuracy, Vector3 spinDirection) {
+        // SHARP CUT LOGIC (Ported from previous Swing logic)
 
-        // Apply an instantaneous force (Impulse) to simulate the sharp deviation due to heavy spin friction.
-        ball.AddForce(deviationForce, ForceMode.Impulse);
+        // 1. Friction (Spinners lose speed off the pitch)
+        reflectedVelocity.z *= (1f - _config.pitchFriction);
+
+        // 2. The "Snap" Turn
+        // Since the ball came in straight, reflectedVelocity.x is near 0.
+        // We inject the turn Velocity here based on spin input.
+
+        float turnForce = spinDirection.x * _config.maxSpinTurnAngle * accuracy;
+        // Note: Reusing maxSpinTurnAngle variable as a velocity multiplier for simplicity here, 
+        // or you can add a specific force variable in Config.
+
+        // Add direct lateral velocity (The Cut)
+        reflectedVelocity.x += turnForce;
+
+        return reflectedVelocity;
     }
 }
