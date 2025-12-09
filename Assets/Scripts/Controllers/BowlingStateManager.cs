@@ -16,19 +16,25 @@ public class BowlingStateManager : MonoBehaviour {
     public bool isSwingDelivery = true;
     public bool isOverTheWicket = true;
 
-    // --- Base Constants (Over the Wicket) ---
+    // --- ACCURACY VARIANCE (Line & Speed) ---
+    [Header("Accuracy Penalty Settings")]
+    [Tooltip("Max variance in METERS from the target line (X-axis) when accuracy is 0.")]
+    public float maxLineError = 1.5f;
+    [Tooltip("Max variance in SPEED when accuracy is 0.")]
+    public float maxSpeedError = 3.0f;
+
+    // --- Constants ---
     public const float SwingSpeedMin = 25f;
     public const float SwingSpeedMax = 40f;
     public const float SwingDirMin = -4f;
     public const float SwingDirMax = 2f;
 
-    public const float SpinSpeedMin = 15f;
+    public const float SpinSpeedMin = 17.5f;
     public const float SpinSpeedMax = 20f;
-    public const float SpinDirMin = -0.4f;
-    public const float SpinDirMax = 0.2f;
+    public const float SpinDirMin = -0.2f;
+    public const float SpinDirMax = 0.5f;
 
-    [Header("Current Internal Settings (Base Values)")]
-    // We keep these stored as "Base" values (relative to the bowler's perspective basically)
+    [Header("Current Internal Settings")]
     [Range(SwingSpeedMin, SwingSpeedMax)] public float swingReleaseSpeed = 30f;
     [Range(SwingDirMin, SwingDirMax)] public float swingDirection = -1f;
 
@@ -73,29 +79,10 @@ public class BowlingStateManager : MonoBehaviour {
         if(onBowlTriggered != null) onBowlTriggered.OnEventRaised -= ExecuteBowl;
     }
 
-    // --- EFFECTIVE GETTERS (For UI) ---
-    // These calculate the Range and Value based on the current Side (Over/Around)
-
-    public float GetMinDirection() {
-        float baseMin = isSwingDelivery ? SwingDirMin : SpinDirMin;
-        float baseMax = isSwingDelivery ? SwingDirMax : SpinDirMax;
-        // If Around Wicket, the range flips: [-4, 2] becomes [-2, 4]
-        return isOverTheWicket ? baseMin : -baseMax;
-    }
-
-    public float GetMaxDirection() {
-        float baseMin = isSwingDelivery ? SwingDirMin : SpinDirMin;
-        float baseMax = isSwingDelivery ? SwingDirMax : SpinDirMax;
-        return isOverTheWicket ? baseMax : -baseMin;
-    }
-
-    public float GetEffectiveDirection() {
-        float baseVal = isSwingDelivery ? swingDirection : spinDirection;
-        // If Around Wicket, effective direction is opposite of base
-        return isOverTheWicket ? baseVal : -baseVal;
-    }
-
-    // --- UI SETTERS ---
+    // --- UI Helpers ---
+    public float GetMinDirection() => isOverTheWicket ? (isSwingDelivery ? SwingDirMin : SpinDirMin) : -(isSwingDelivery ? SwingDirMax : SpinDirMax);
+    public float GetMaxDirection() => isOverTheWicket ? (isSwingDelivery ? SwingDirMax : SpinDirMax) : -(isSwingDelivery ? SwingDirMin : SpinDirMin);
+    public float GetEffectiveDirection() => isOverTheWicket ? (isSwingDelivery ? swingDirection : spinDirection) : -(isSwingDelivery ? swingDirection : spinDirection);
 
     public void SetCurrentSpeed(float val) {
         if(isSwingDelivery) swingReleaseSpeed = val;
@@ -103,18 +90,9 @@ public class BowlingStateManager : MonoBehaviour {
     }
 
     public void SetCurrentDirectionFromUI(float uiVal) {
-        // uiVal is the "Effective" direction. We need to store the "Base" direction.
-        // Over: Base = UI
-        // Around: Base = -UI
         float baseVal = isOverTheWicket ? uiVal : -uiVal;
-
-        if(isSwingDelivery) {
-            swingDirection = baseVal;
-            Debug.Log($"[Settings] Swing Effective: {uiVal} | Stored Base: {swingDirection}");
-        } else {
-            spinDirection = baseVal;
-            Debug.Log($"[Settings] Spin Effective: {uiVal} | Stored Base: {spinDirection}");
-        }
+        if(isSwingDelivery) swingDirection = Mathf.Clamp(baseVal, SwingDirMin, SwingDirMax);
+        else spinDirection = Mathf.Clamp(baseVal, SpinDirMin, SpinDirMax);
     }
 
     public void SetDeliveryType(bool isSwing) {
@@ -135,7 +113,6 @@ public class BowlingStateManager : MonoBehaviour {
     }
 
     // --- Bowling Logic ---
-
     public void SetAccuracyValue(float value) {
         _lockedAccuracy = value;
         CheckReadiness();
@@ -156,35 +133,58 @@ public class BowlingStateManager : MonoBehaviour {
         if(ballController.CurrentState != BallPhysicsController.BallState.Idle) return;
         if(!_isReadyToBowl) return;
 
-        // 1. Get Params
-        float currentSpeed = isSwingDelivery ? swingReleaseSpeed : spinReleaseSpeed;
+        // 1. Get Base Inputs (The Player's Intent)
+        float baseSpeed = isSwingDelivery ? swingReleaseSpeed : spinReleaseSpeed;
+        float intendedDirection = GetEffectiveDirection(); // This is the Slider Value
 
-        // 2. Calculate Effective Direction (Physics uses this directly now)
-        float effectiveDirection = GetEffectiveDirection();
+        // 2. Calculate Variance Factor
+        // Low Accuracy (0.0) -> high errorFactor (1.0)
+        float errorFactor = 1f - _lockedAccuracy;
 
+        // 3. Apply Penalty: NOISY SPEED
+        float speedNoise = Random.Range(-maxSpeedError, maxSpeedError) * errorFactor;
+        float finalSpeed = baseSpeed + speedNoise;
+
+        // 4. Apply Penalty: NOISY LINE (Missing the target)
+        // We add noise to the Target Position X, simulating a "Wide" or "Leg side" error
+        float lineNoise = Random.Range(-maxLineError, maxLineError) * errorFactor;
+        Vector3 noisyTargetPos = _lockedTargetPosition;
+        noisyTargetPos.x += lineNoise;
+
+        Debug.Log($"[Bowl] Acc: {_lockedAccuracy:F2} | Line Error: {lineNoise:F2}m | Speed Error: {speedNoise:F1}");
+
+        // 5. Trajectory Calculation (Aiming for the NOISY target)
         Vector3 startPos = isOverTheWicket ? overTheWicketPos.position : aroundTheWicketPos.position;
-
-        // 3. Trajectory Calculation
-        Vector3 displacement = _lockedTargetPosition - startPos;
-        float time = displacement.magnitude / currentSpeed;
+        Vector3 displacement = noisyTargetPos - startPos;
+        float time = displacement.magnitude / finalSpeed;
 
         float vY = (displacement.y - (0.5f * config.gravity * Mathf.Pow(time, 2))) / time;
         float vZ = displacement.z / time;
+
+        // Horizontal Velocity (Aiming logic)
+        // Note: For Swing, we still compensate based on the INTENDED direction so the ball *starts* on a line 
+        // that would hit the target if it swung fully. But if accuracy is low, it won't swing fully, 
+        // so it will drift off that calculated line.
         float vX = 0f;
 
         if(isSwingDelivery) {
             Rigidbody rb = ballController.GetComponent<Rigidbody>();
             float mass = rb != null ? rb.mass : 1f;
-            // Use effectiveDirection directly
-            float swingForceX = effectiveDirection * config.maxSwingForce * _lockedAccuracy;
-            float accX = swingForceX / mass;
+
+            // Expected Swing Force (Assuming Perfect Execution)
+            float expectedSwingForceX = intendedDirection * config.maxSwingForce;
+            float accX = expectedSwingForceX / mass;
+
             vX = (displacement.x - (0.5f * accX * Mathf.Pow(time, 2))) / time;
         } else {
             vX = displacement.x / time;
         }
 
         Vector3 initialVelocity = new Vector3(vX, vY, vZ);
-        Vector3 controlInput = new Vector3(effectiveDirection, 0, 0);
+
+        // 6. Pass INTENDED Direction to Physics
+        // The Delivery scripts will use _lockedAccuracy to DAMPEN this value.
+        Vector3 controlInput = new Vector3(intendedDirection, 0, 0);
 
         ballController.StartDelivery(_currentDeliveryType, _lockedAccuracy, controlInput, initialVelocity);
 

@@ -1,6 +1,9 @@
 using System;
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
+// If using TextMeshPro, uncomment the line below and change 'Text' to 'TMP_Text' in the variables
+// using TMPro; 
 
 public class BowlingUIController : MonoBehaviour {
     [Header("Controllers")]
@@ -18,6 +21,12 @@ public class BowlingUIController : MonoBehaviour {
     [Header("Sliders")]
     public Slider speedSlider;
     public Slider angleSlider;
+
+    [Header("Slider Labels (Assign Text Objects)")]
+    public TextMeshProUGUI speedMinText;
+    public TextMeshProUGUI speedMaxText;
+    public TextMeshProUGUI angleMinText;
+    public TextMeshProUGUI angleMaxText;
 
     [Header("Event Channels")]
     public VoidEventChannelSO onBowlTriggered;
@@ -81,7 +90,6 @@ public class BowlingUIController : MonoBehaviour {
 
     private void OnAngleSliderChanged(float val) {
         if(_isUpdatingUI) return;
-        // We now call the special "FromUI" method which handles the math
         stateManager.SetCurrentDirectionFromUI(val);
     }
 
@@ -90,18 +98,27 @@ public class BowlingUIController : MonoBehaviour {
     private void RefreshSliders() {
         _isUpdatingUI = true; // Block callbacks while we setup limits
 
-        // 1. Speed (Doesn't change with side, but good to refresh)
+        // 1. Speed (Changes based on Swing vs Spin)
+        float speedMin, speedMax, speedCurrent;
         if(stateManager.isSwingDelivery) {
-            SetupSlider(speedSlider, BowlingStateManager.SwingSpeedMin, BowlingStateManager.SwingSpeedMax, stateManager.swingReleaseSpeed);
+            speedMin = BowlingStateManager.SwingSpeedMin;
+            speedMax = BowlingStateManager.SwingSpeedMax;
+            speedCurrent = stateManager.swingReleaseSpeed;
         } else {
-            SetupSlider(speedSlider, BowlingStateManager.SpinSpeedMin, BowlingStateManager.SpinSpeedMax, stateManager.spinReleaseSpeed);
+            speedMin = BowlingStateManager.SpinSpeedMin;
+            speedMax = BowlingStateManager.SpinSpeedMax;
+            speedCurrent = stateManager.spinReleaseSpeed;
         }
+        SetupSlider(speedSlider, speedMin, speedMax, speedCurrent);
+        UpdateMinMaxLabels(speedMinText, speedMaxText, speedMin, speedMax);
 
-        // 2. Angle (Changes with Side!)
-        float min = stateManager.GetMinDirection();
-        float max = stateManager.GetMaxDirection();
-        float current = stateManager.GetEffectiveDirection();
-        SetupSlider(angleSlider, min, max, current);
+        // 2. Angle (Changes based on Swing vs Spin AND Over/Around Wicket)
+        float angleMin = stateManager.GetMinDirection();
+        float angleMax = stateManager.GetMaxDirection();
+        float angleCurrent = stateManager.GetEffectiveDirection();
+
+        SetupSlider(angleSlider, angleMin, angleMax, angleCurrent);
+        UpdateMinMaxLabels(angleMinText, angleMaxText, angleMin, angleMax);
 
         _isUpdatingUI = false;
     }
@@ -111,6 +128,11 @@ public class BowlingUIController : MonoBehaviour {
         s.minValue = min;
         s.maxValue = max;
         s.value = current;
+    }
+
+    private void UpdateMinMaxLabels(TextMeshProUGUI minText, TextMeshProUGUI maxText, float minVal, float maxVal) {
+        if(minText != null) minText.text = minVal.ToString("F1"); // 1 Decimal place (e.g. "17.5")
+        if(maxText != null) maxText.text = maxVal.ToString("F1");
     }
 
     private void ShowSelectionUI() {
