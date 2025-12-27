@@ -16,41 +16,37 @@ public class BowlingStateManager : MonoBehaviour {
     public bool isSwingDelivery = true;
     public bool isOverTheWicket = true;
 
-    // --- ACCURACY VARIANCE (Line & Speed) ---
-    [Header("Accuracy Penalty Settings")]
-    [Tooltip("Max variance in METERS from the target line (X-axis) when accuracy is 0.")]
-    public float maxLineError = 1.5f;
-    [Tooltip("Max variance in SPEED when accuracy is 0.")]
-    public float maxSpeedError = 3.0f;
-
     // --- Constants ---
-    public const float SwingSpeedMin = 25f;
-    public const float SwingSpeedMax = 40f;
-    public const float SwingDirMin = -4f;
-    public const float SwingDirMax = 2f;
-
+    // Removed Swing Min/Max constants as requested.
+    // Spin still needs ranges if variable speed is allowed for spin.
     public const float SpinSpeedMin = 17.5f;
     public const float SpinSpeedMax = 20f;
-    public const float SpinDirMin = -0.2f;
-    public const float SpinDirMax = 0.5f;
+    // Spin Direction could also be unified, but keeping as per current logic for now:
+    public const float SpinDirMin = -1f;
+    public const float SpinDirMax = 1f;
 
     [Header("Current Internal Settings")]
-    [Range(SwingSpeedMin, SwingSpeedMax)] public float swingReleaseSpeed = 30f;
-    [Range(SwingDirMin, SwingDirMax)] public float swingDirection = -1f;
+    // Swing Speed is now CONSTANT (config.maxBallSpeed), so this var is only for Spin or debug override
+    public float spinReleaseSpeed = 18f;
 
-    [Range(SpinSpeedMin, SpinSpeedMax)] public float spinReleaseSpeed = 18f;
-    [Range(SpinDirMin, SpinDirMax)] public float spinDirection = -0.1f;
+    [Range(-100f, 100f)] public float rawDirectionInput = 0f;
+
+    [Header("Physics Tweaks")]
+    [Tooltip("The physical radius of the ball.")]
+    public float ballRadius = 0.05f;
 
     [Header("Events")]
     public Vector3EventChannelSO onBounceMarkerSet;
-    public FloatEventChannelSO onAccuracyValueSet;
+    public FloatEventChannelSO onStrengthValueSet;
     public VoidEventChannelSO onBowlTriggered;
     public VoidEventChannelSO onDeliveryFinished;
 
     private IBowlingType _currentDeliveryType;
     private Dictionary<string, IBowlingType> _deliveryTypes;
+
     private Vector3 _lockedTargetPosition;
-    private float _lockedAccuracy = -1f;
+    private bool _hasTargetPosition = false;
+    private float _lockedStrength = -1f;
     private bool _isReadyToBowl = false;
 
     void Awake() {
@@ -63,41 +59,42 @@ public class BowlingStateManager : MonoBehaviour {
 
     void Start() {
         SetDeliveryType(true);
+        if(onStrengthValueSet == null) Debug.LogError("Missing Strength Event Channel!");
     }
 
     void OnDestroy() => UnsubscribeEvents();
 
     private void SubscribeEvents() {
         if(onBounceMarkerSet != null) onBounceMarkerSet.OnEventRaised += SetBounceTargetPosition;
-        if(onAccuracyValueSet != null) onAccuracyValueSet.OnEventRaised += SetAccuracyValue;
+        if(onStrengthValueSet != null) onStrengthValueSet.OnEventRaised += SetStrengthValue;
         if(onBowlTriggered != null) onBowlTriggered.OnEventRaised += ExecuteBowl;
     }
 
     private void UnsubscribeEvents() {
         if(onBounceMarkerSet != null) onBounceMarkerSet.OnEventRaised -= SetBounceTargetPosition;
-        if(onAccuracyValueSet != null) onAccuracyValueSet.OnEventRaised -= SetAccuracyValue;
+        if(onStrengthValueSet != null) onStrengthValueSet.OnEventRaised -= SetStrengthValue;
         if(onBowlTriggered != null) onBowlTriggered.OnEventRaised -= ExecuteBowl;
     }
 
     // --- UI Helpers ---
-    public float GetMinDirection() => isOverTheWicket ? (isSwingDelivery ? SwingDirMin : SpinDirMin) : -(isSwingDelivery ? SwingDirMax : SpinDirMax);
-    public float GetMaxDirection() => isOverTheWicket ? (isSwingDelivery ? SwingDirMax : SpinDirMax) : -(isSwingDelivery ? SwingDirMin : SpinDirMin);
-    public float GetEffectiveDirection() => isOverTheWicket ? (isSwingDelivery ? swingDirection : spinDirection) : -(isSwingDelivery ? swingDirection : spinDirection);
-
     public void SetCurrentSpeed(float val) {
-        if(isSwingDelivery) swingReleaseSpeed = val;
-        else spinReleaseSpeed = val;
+        // Only affects Spin now, as Swing is constant
+        if(!isSwingDelivery) spinReleaseSpeed = val;
     }
 
-    public void SetCurrentDirectionFromUI(float uiVal) {
-        float baseVal = isOverTheWicket ? uiVal : -uiVal;
-        if(isSwingDelivery) swingDirection = Mathf.Clamp(baseVal, SwingDirMin, SwingDirMax);
-        else spinDirection = Mathf.Clamp(baseVal, SpinDirMin, SpinDirMax);
+    public void SetRawDirectionFromUI(float val) {
+        rawDirectionInput = val;
+    }
+
+    public float GetEffectiveDirection() {
+        // Maps -100 to 100  ->  -1.0 to 1.0
+        return rawDirectionInput / 100f;
     }
 
     public void SetDeliveryType(bool isSwing) {
         isSwingDelivery = isSwing;
         _currentDeliveryType = isSwingDelivery ? _deliveryTypes["Swing"] : _deliveryTypes["Spin"];
+        if(ballController != null) ballController.ClearDebugLine();
         ResetBallToStart();
     }
 
@@ -107,24 +104,26 @@ public class BowlingStateManager : MonoBehaviour {
     }
 
     private void ResetBallToStart() {
+        rawDirectionInput = 0f;
         if(ballController == null) return;
         Vector3 startPos = isOverTheWicket ? overTheWicketPos.position : aroundTheWicketPos.position;
         ballController.ResetBall(startPos);
     }
 
     // --- Bowling Logic ---
-    public void SetAccuracyValue(float value) {
-        _lockedAccuracy = value;
+    public void SetStrengthValue(float value) {
+        _lockedStrength = value;
         CheckReadiness();
     }
 
     private void SetBounceTargetPosition(Vector3 targetPosition) {
         _lockedTargetPosition = targetPosition;
+        _hasTargetPosition = true;
         CheckReadiness();
     }
 
     private void CheckReadiness() {
-        if(_lockedAccuracy >= 0f && _lockedTargetPosition != Vector3.zero) {
+        if(_lockedStrength >= 0f && _hasTargetPosition) {
             _isReadyToBowl = true;
         }
     }
@@ -133,68 +132,73 @@ public class BowlingStateManager : MonoBehaviour {
         if(ballController.CurrentState != BallPhysicsController.BallState.Idle) return;
         if(!_isReadyToBowl) return;
 
-        // 1. Get Base Inputs (The Player's Intent)
-        float baseSpeed = isSwingDelivery ? swingReleaseSpeed : spinReleaseSpeed;
-        float intendedDirection = GetEffectiveDirection(); // This is the Slider Value
+        // 1. Gather Inputs
+        // UNIFICATION CHANGE: Swing uses Constant Config Speed
+        float desiredSpeed = isSwingDelivery ? config.maxBallSpeed : spinReleaseSpeed;
 
-        // 2. Calculate Variance Factor
-        // Low Accuracy (0.0) -> high errorFactor (1.0)
-        float errorFactor = 1f - _lockedAccuracy;
+        float directionMultiplier = GetEffectiveDirection(); // -1.0 to 1.0
 
-        // 3. Apply Penalty: NOISY SPEED
-        float speedNoise = Random.Range(-maxSpeedError, maxSpeedError) * errorFactor;
-        float finalSpeed = baseSpeed + speedNoise;
-
-        // 4. Apply Penalty: NOISY LINE (Missing the target)
-        // We add noise to the Target Position X, simulating a "Wide" or "Leg side" error
-        float lineNoise = Random.Range(-maxLineError, maxLineError) * errorFactor;
-        Vector3 noisyTargetPos = _lockedTargetPosition;
-        noisyTargetPos.x += lineNoise;
-
-        Debug.Log($"[Bowl] Acc: {_lockedAccuracy:F2} | Line Error: {lineNoise:F2}m | Speed Error: {speedNoise:F1}");
-
-        // 5. Trajectory Calculation (Aiming for the NOISY target)
         Vector3 startPos = isOverTheWicket ? overTheWicketPos.position : aroundTheWicketPos.position;
-        Vector3 displacement = noisyTargetPos - startPos;
-        float time = displacement.magnitude / finalSpeed;
+        Vector3 targetPos = _lockedTargetPosition;
+        targetPos.y += ballRadius;
 
-        float vY = (displacement.y - (0.5f * config.gravity * Mathf.Pow(time, 2))) / time;
-        float vZ = displacement.z / time;
+        Vector3 displacement = targetPos - startPos;
 
-        // Horizontal Velocity (Aiming logic)
-        // Note: For Swing, we still compensate based on the INTENDED direction so the ball *starts* on a line 
-        // that would hit the target if it swung fully. But if accuracy is low, it won't swing fully, 
-        // so it will drift off that calculated line.
-        float vX = 0f;
+        // 2. Calculate Acceleration
+        Vector3 acceleration = CalculateAcceleration(directionMultiplier, _lockedStrength);
 
-        if(isSwingDelivery) {
-            Rigidbody rb = ballController.GetComponent<Rigidbody>();
-            float mass = rb != null ? rb.mass : 1f;
+        // 3. Shared Solver
+        TrajectoryResult result = SolveTrajectory(displacement, acceleration, desiredSpeed);
 
-            // Expected Swing Force (Assuming Perfect Execution)
-            float expectedSwingForceX = intendedDirection * config.maxSwingForce;
-            float accX = expectedSwingForceX / mass;
-
-            vX = (displacement.x - (0.5f * accX * Mathf.Pow(time, 2))) / time;
-        } else {
-            vX = displacement.x / time;
-        }
-
-        Vector3 initialVelocity = new Vector3(vX, vY, vZ);
-
-        // 6. Pass INTENDED Direction to Physics
-        // The Delivery scripts will use _lockedAccuracy to DAMPEN this value.
-        Vector3 controlInput = new Vector3(intendedDirection, 0, 0);
-
-        ballController.StartDelivery(_currentDeliveryType, _lockedAccuracy, controlInput, initialVelocity);
+        // 4. Launch
+        Vector3 controlInput = new Vector3(directionMultiplier, 0, 0);
+        ballController.StartDelivery(_currentDeliveryType, _lockedStrength, controlInput, result.velocity, acceleration);
 
         ResetState();
+    }
+
+    // --- Shared Physics Logic ---
+
+    private Vector3 CalculateAcceleration(float dirMultiplier, float strength) {
+        Vector3 acc = Vector3.up * config.gravity;
+        if(isSwingDelivery) {
+            // UNIFICATION CHANGE: 
+            // -100 UI Input -> -1.0 Multiplier
+            // Multiplier * MaxSwingForce = Actual Force applied
+            float swingAcc = dirMultiplier * config.maxSwingForce * strength;
+            acc.x += swingAcc;
+        }
+        return acc;
+    }
+
+    private struct TrajectoryResult {
+        public Vector3 velocity;
+        public float time;
+    }
+
+    private TrajectoryResult SolveTrajectory(Vector3 displacement, Vector3 acceleration, float desiredSpeed) {
+        float t = displacement.magnitude / desiredSpeed;
+        Vector3 v0 = Vector3.zero;
+        int iterations = 20;
+
+        for(int i = 0; i < iterations; i++) {
+            v0 = (displacement - (0.5f * acceleration * t * t)) / t;
+            float calculatedSpeed = v0.magnitude;
+
+            if(Mathf.Abs(calculatedSpeed - desiredSpeed) < 0.001f) break;
+
+            float ratio = calculatedSpeed / desiredSpeed;
+            t = t * Mathf.Lerp(1f, ratio, 0.5f);
+        }
+
+        return new TrajectoryResult { velocity = v0, time = t };
     }
 
     private void ResetState() {
         _isReadyToBowl = false;
         _lockedTargetPosition = Vector3.zero;
-        _lockedAccuracy = -1f;
+        _hasTargetPosition = false;
+        _lockedStrength = -1f;
     }
 
     public void OnBallBounce() { }
@@ -203,6 +207,46 @@ public class BowlingStateManager : MonoBehaviour {
         ballController.CurrentState = BallPhysicsController.BallState.Idle;
         markerController.ResetMarker();
         if(inputReader != null) inputReader.ResetInputState();
+        ResetBallToStart();
         onDeliveryFinished.RaiseEvent();
+    }
+
+    private void OnDrawGizmos() {
+        if(markerController != null) {
+            Vector3 groundPos = _hasTargetPosition ? _lockedTargetPosition : markerController.transform.position;
+            Vector3 targetBallCenter = groundPos + Vector3.up * ballRadius;
+
+            Gizmos.color = Color.red; Gizmos.DrawWireSphere(groundPos, 0.15f);
+            Gizmos.color = Color.yellow; Gizmos.DrawWireSphere(targetBallCenter, ballRadius);
+
+            if(overTheWicketPos != null && aroundTheWicketPos != null) {
+                Vector3 startPos = isOverTheWicket ? overTheWicketPos.position : aroundTheWicketPos.position;
+                Gizmos.color = Color.green; Gizmos.DrawWireSphere(startPos, 0.15f);
+
+                if(config != null) DrawPathPreview(startPos, targetBallCenter);
+            }
+        }
+    }
+
+    private void DrawPathPreview(Vector3 start, Vector3 end) {
+        // UNIFICATION CHANGE: Use Constant Config Speed for Preview too
+        float speed = isSwingDelivery ? config.maxBallSpeed : spinReleaseSpeed;
+
+        float dir = GetEffectiveDirection();
+        float strength = (_lockedStrength >= 0) ? _lockedStrength : 1f;
+
+        Vector3 disp = end - start;
+        Vector3 acc = CalculateAcceleration(dir, strength);
+        TrajectoryResult result = SolveTrajectory(disp, acc, speed);
+
+        Gizmos.color = Color.cyan;
+        Vector3 prev = start;
+        int res = 30;
+        for(int i = 1; i <= res; i++) {
+            float ct = (result.time / res) * i;
+            Vector3 point = start + (result.velocity * ct) + (0.5f * acc * ct * ct);
+            Gizmos.DrawLine(prev, point);
+            prev = point;
+        }
     }
 }

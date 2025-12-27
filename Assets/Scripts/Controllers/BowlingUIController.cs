@@ -2,8 +2,6 @@ using System;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
-// If using TextMeshPro, uncomment the line below and change 'Text' to 'TMP_Text' in the variables
-// using TMPro; 
 
 public class BowlingUIController : MonoBehaviour {
     [Header("Controllers")]
@@ -22,39 +20,42 @@ public class BowlingUIController : MonoBehaviour {
     public Slider speedSlider;
     public Slider angleSlider;
 
-    [Header("Slider Labels (Assign Text Objects)")]
+    [Header("Labels (Assign Text Objects)")]
     public TextMeshProUGUI speedMinText;
     public TextMeshProUGUI speedMaxText;
     public TextMeshProUGUI angleMinText;
     public TextMeshProUGUI angleMaxText;
 
+    [Header("New UI Elements")]
+    public TextMeshProUGUI effectiveStrengthText;
+
     [Header("Event Channels")]
     public VoidEventChannelSO onBowlTriggered;
-    public FloatEventChannelSO onAccuracyValueSet;
+    public FloatEventChannelSO onStrengthValueSet;
     public VoidEventChannelSO onDeliveryFinished;
 
-    // Internal flag to prevent loop when updating sliders via code
     private bool _isUpdatingUI = false;
 
     void OnEnable() {
         if(speedSlider != null) speedSlider.onValueChanged.AddListener(OnSpeedSliderChanged);
-        if(angleSlider != null) angleSlider.onValueChanged.AddListener(OnAngleSliderChanged);
+        if(angleSlider != null) angleSlider.onValueChanged.AddListener(OnDirectionSliderChanged);
 
-        if(onAccuracyValueSet != null) onAccuracyValueSet.OnEventRaised += OnAccuracyLocked;
+        if(onStrengthValueSet != null) onStrengthValueSet.OnEventRaised += OnStrengthLocked;
         if(onDeliveryFinished != null) onDeliveryFinished.OnEventRaised += OnDeliveryFinished;
     }
 
     void OnDisable() {
         if(speedSlider != null) speedSlider.onValueChanged.RemoveListener(OnSpeedSliderChanged);
-        if(angleSlider != null) angleSlider.onValueChanged.RemoveListener(OnAngleSliderChanged);
+        if(angleSlider != null) angleSlider.onValueChanged.RemoveListener(OnDirectionSliderChanged);
 
-        if(onAccuracyValueSet != null) onAccuracyValueSet.OnEventRaised -= OnAccuracyLocked;
+        if(onStrengthValueSet != null) onStrengthValueSet.OnEventRaised -= OnStrengthLocked;
         if(onDeliveryFinished != null) onDeliveryFinished.OnEventRaised -= OnDeliveryFinished;
     }
 
     void Start() {
         ShowSelectionUI();
         if(bowlButton != null) bowlButton.gameObject.SetActive(false);
+        if(effectiveStrengthText != null) effectiveStrengthText.text = "";
     }
 
     public void OnSelectSwing() {
@@ -70,9 +71,7 @@ public class BowlingUIController : MonoBehaviour {
     }
 
     public void OnChangeSideClicked() {
-        // 1. Toggle Side
         stateManager.ToggleBowlingSide();
-        // 2. Refresh UI to show new Effective Values and Ranges
         RefreshSliders();
     }
 
@@ -80,6 +79,7 @@ public class BowlingUIController : MonoBehaviour {
         if(onBowlTriggered != null) onBowlTriggered.RaiseEvent();
         preBowlPanelSetActive(false);
         bowlButton.gameObject.SetActive(false);
+        if(effectiveStrengthText != null) effectiveStrengthText.text = "";
     }
 
     // --- Slider Callbacks ---
@@ -88,37 +88,42 @@ public class BowlingUIController : MonoBehaviour {
         stateManager.SetCurrentSpeed(val);
     }
 
-    private void OnAngleSliderChanged(float val) {
+    private void OnDirectionSliderChanged(float val) {
         if(_isUpdatingUI) return;
-        stateManager.SetCurrentDirectionFromUI(val);
+        stateManager.SetRawDirectionFromUI(val);
     }
 
     // --- State Management ---
 
     private void RefreshSliders() {
-        _isUpdatingUI = true; // Block callbacks while we setup limits
+        _isUpdatingUI = true;
 
-        // 1. Speed (Changes based on Swing vs Spin)
-        float speedMin, speedMax, speedCurrent;
+        // 1. Speed Slider Logic
         if(stateManager.isSwingDelivery) {
-            speedMin = BowlingStateManager.SwingSpeedMin;
-            speedMax = BowlingStateManager.SwingSpeedMax;
-            speedCurrent = stateManager.swingReleaseSpeed;
+            // Swing has Constant Speed -> Disable Speed Slider
+            if(speedSlider != null) speedSlider.interactable = false;
+
+            // Just show the fixed value
+            float fixedSpeed = stateManager.config.maxBallSpeed;
+            SetupSlider(speedSlider, fixedSpeed, fixedSpeed, fixedSpeed);
+            UpdateMinMaxLabels(speedMinText, speedMaxText, fixedSpeed, fixedSpeed);
         } else {
-            speedMin = BowlingStateManager.SpinSpeedMin;
-            speedMax = BowlingStateManager.SpinSpeedMax;
-            speedCurrent = stateManager.spinReleaseSpeed;
+            // Spin has Variable Speed -> Enable Speed Slider
+            if(speedSlider != null) speedSlider.interactable = true;
+
+            float speedMin = BowlingStateManager.SpinSpeedMin;
+            float speedMax = BowlingStateManager.SpinSpeedMax;
+            float speedCurrent = stateManager.spinReleaseSpeed;
+
+            SetupSlider(speedSlider, speedMin, speedMax, speedCurrent);
+            UpdateMinMaxLabels(speedMinText, speedMaxText, speedMin, speedMax);
         }
-        SetupSlider(speedSlider, speedMin, speedMax, speedCurrent);
-        UpdateMinMaxLabels(speedMinText, speedMaxText, speedMin, speedMax);
 
-        // 2. Angle (Changes based on Swing vs Spin AND Over/Around Wicket)
-        float angleMin = stateManager.GetMinDirection();
-        float angleMax = stateManager.GetMaxDirection();
-        float angleCurrent = stateManager.GetEffectiveDirection();
+        // 2. Angle/Direction (Always -100 to 100)
+        SetupSlider(angleSlider, -100f, 100f, 0f);
+        UpdateMinMaxLabels(angleMinText, angleMaxText, -100f, 100f);
 
-        SetupSlider(angleSlider, angleMin, angleMax, angleCurrent);
-        UpdateMinMaxLabels(angleMinText, angleMaxText, angleMin, angleMax);
+        stateManager.SetRawDirectionFromUI(0f);
 
         _isUpdatingUI = false;
     }
@@ -131,8 +136,8 @@ public class BowlingUIController : MonoBehaviour {
     }
 
     private void UpdateMinMaxLabels(TextMeshProUGUI minText, TextMeshProUGUI maxText, float minVal, float maxVal) {
-        if(minText != null) minText.text = minVal.ToString("F1"); // 1 Decimal place (e.g. "17.5")
-        if(maxText != null) maxText.text = maxVal.ToString("F1");
+        if(minText != null) minText.text = minVal.ToString("F0");
+        if(maxText != null) maxText.text = maxVal.ToString("F0");
     }
 
     private void ShowSelectionUI() {
@@ -140,6 +145,7 @@ public class BowlingUIController : MonoBehaviour {
         preBowlPanelSetActive(false);
         bowlButton.gameObject.SetActive(false);
         accuracyMeter.SetMeterActive(false);
+        if(effectiveStrengthText != null) effectiveStrengthText.text = "";
     }
 
     private void GoToPreBowlState() {
@@ -157,10 +163,17 @@ public class BowlingUIController : MonoBehaviour {
         }
     }
 
-    private void OnAccuracyLocked(float val) {
+    private void OnStrengthLocked(float meterVal) {
         if(bowlButton != null) {
             bowlButton.gameObject.SetActive(true);
             bowlButton.Select();
+        }
+
+        if(effectiveStrengthText != null) {
+            float directionMagnitude = Mathf.Abs(angleSlider.value);
+            float effectiveStrength = meterVal * directionMagnitude;
+
+            effectiveStrengthText.text = $"Effective Strength: {effectiveStrength:F0}%";
         }
     }
 

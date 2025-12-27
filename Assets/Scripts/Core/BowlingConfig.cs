@@ -1,24 +1,18 @@
 using UnityEngine;
 
-[CreateAssetMenu(fileName = "BowlingConfig", menuName = "Cricket/Bowling Config", order = 1)]
+[CreateAssetMenu(fileName = "BowlingConfig", menuName = "Cricket/Bowling Config")]
 public class BowlingConfig : ScriptableObject {
-    [Header("Speed Settings (m/s)")]
-    public float minBallSpeed = 18f;
-    public float maxBallSpeed = 45f;
-
-    [Header("Physics Constants")]
+    [Header("Base Settings")]
     public float gravity = -9.81f;
-    public float airDrag = 0.1f; // Low drag to keep speed up
-
-    [Header("Bounciness")]
-    [Range(0f, 1f)] public float restitution = 0.75f; // Good bounce
-    [Range(0f, 1f)] public float pitchFriction = 0.1f; // Low friction for skidding
+    public float maxBallSpeed = 30f; // NEW: The constant speed for Swing deliveries
+    public float airDrag = 0.1f;
+    public float pitchFriction = 0.2f;
+    public float restitution = 0.6f;
 
     [Header("Swing Settings")]
-    [Tooltip("Force applied sideways. Higher = More Curve.")]
-    public float maxSwingForce = 45.0f; // Increased for visibility
+    public float maxSwingForce = 15f;
+    public AnimationCurve swingCurve;
 
     [Header("Spin Settings")]
-    public float maxSpinTurnAngle = 35.0f;
-    public float driftForce = 8.0f;
+    public float maxSpinTurnAngle = 20f;
 }

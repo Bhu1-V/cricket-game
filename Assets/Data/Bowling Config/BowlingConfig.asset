@@ -12,12 +12,16 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f3069ba5220175d4dbdda1dc7e4f25f0, type: 3}
   m_Name: BowlingConfig
   m_EditorClassIdentifier: 
-  minBallSpeed: 10.3
-  maxBallSpeed: 42
   gravity: -9.81
-  airDrag: 0.2
-  restitution: 0.753
+  maxBallSpeed: 35
+  airDrag: 0.1
   pitchFriction: 0.8
-  maxSwingForce: 35
+  restitution: 0.753
+  maxSwingForce: 460.6
+  swingCurve:
+    serializedVersion: 2
+    m_Curve: []
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
   maxSpinTurnAngle: 30
-  driftForce: 5

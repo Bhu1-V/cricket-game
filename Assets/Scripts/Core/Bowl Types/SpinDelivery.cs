@@ -8,28 +8,34 @@ public class SpinDelivery : IBowlingType {
         _config = config;
     }
 
-    public void ApplyInitialForce(Rigidbody ball, Vector3 initialVelocity, Vector3 pitchUpVector, float accuracy) {
-        ball.linearDamping = _config.airDrag * 1.2f;
+    public void ApplyInitialForce(Rigidbody ball, Vector3 initialVelocity, Vector3 pitchUpVector, float strengthFactor) {
+        // Standard drag logic or 0 if you want it identical to swing's purity
+        ball.linearDamping = _config.airDrag;
     }
 
-    public void ApplyMidAirPhysics(Rigidbody ball, float accuracy, Vector3 swingDirection) {
-        // Spin travels straight in air
+    public void ApplyMidAirPhysics(Rigidbody ball, float strengthFactor, Vector3 swingDirection) {
+        // SNIPPET LOGIC: "Phase II: Spin effect happens only at bounce"
+        // No forces in air.
     }
 
-    public Vector3 HandleBouncePhysics(Vector3 reflectedVelocity, Vector3 collisionNormal, float accuracy, Vector3 spinDirection) {
-        // Friction
-        reflectedVelocity.z *= (1f - _config.pitchFriction);
+    public Vector3 HandleBouncePhysics(Vector3 reflectedVelocity, Vector3 collisionNormal, float strengthFactor, Vector3 spinDirection) {
+        // SNIPPET LOGIC: ApplySpinImpulse()
+        // "Calculate instant velocity change... ForceMode.VelocityChange is critical here."
 
-        // PENALTY LOGIC:
-        // If Accuracy is 0, Turn Force is 0. Ball continues straight (reflected X).
-        // If Accuracy is 1, Full Turn.
+        // 1. Calculate Impulse (The "Cut")
+        // spinDirection.x is -1 (Off) to 1 (Leg)
+        // We use maxSpinTurnAngle as the velocity magnitude scalar here for simplicity.
+        float spinMagnitude = spinDirection.x * _config.maxSpinTurnAngle * strengthFactor;
+        Vector3 spinImpulse = Vector3.right * spinMagnitude;
 
-        float dampener = accuracy;
+        // 2. Apply Base Friction to the reflection
+        Vector3 flatVel = new Vector3(reflectedVelocity.x, 0, reflectedVelocity.z);
+        flatVel *= (1f - _config.pitchFriction);
+        Vector3 finalVelocity = new Vector3(flatVel.x, reflectedVelocity.y, flatVel.z);
 
-        float turnForce = spinDirection.x * _config.maxSpinTurnAngle * dampener;
+        // 3. Add Impulse directly (Equivalent to ForceMode.VelocityChange)
+        finalVelocity += spinImpulse;
 
-        reflectedVelocity.x += turnForce;
-
-        return reflectedVelocity;
+        return finalVelocity;
     }
 }
