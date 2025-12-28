@@ -673,7 +673,7 @@ GameObject:
   - component: {fileID: 149554690}
   - component: {fileID: 149554689}
   - component: {fileID: 149554688}
-  m_Layer: 0
+  m_Layer: 7
   m_Name: Wicket (2)
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -1475,10 +1475,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 273840604ba1b73478cde0633ecb5754, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  ballRadius: 0.7
-  groundLayer:
+  pitchLayer:
     serializedVersion: 2
-    m_Bits: 64
+    m_Bits: 321
+  obstacleLayer:
+    serializedVersion: 2
+    m_Bits: 641
   debugMode: 1
   debugLineColor: {r: 1, g: 0, b: 0, a: 1}
   debugLineWidth: 0.056
@@ -1531,7 +1533,6 @@ MonoBehaviour:
   isOverTheWicket: 1
   spinReleaseSpeed: 18
   rawDirectionInput: 0
-  ballRadius: 0.1
   onBounceMarkerSet: {fileID: 11400000, guid: fb8d54c62c14b9642be16b56ff3aca41, type: 2}
   onStrengthValueSet: {fileID: 11400000, guid: f8a930111db1e6a44b618c553876e727, type: 2}
   onBowlTriggered: {fileID: 11400000, guid: 725a08d0cf5e6314299f7e61719bf9f8, type: 2}
@@ -3422,7 +3423,7 @@ GameObject:
   - component: {fileID: 1082806423}
   - component: {fileID: 1082806424}
   - component: {fileID: 1082806425}
-  m_Layer: 0
+  m_Layer: 7
   m_Name: Wickets
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -4240,7 +4241,7 @@ GameObject:
   - component: {fileID: 1692613840}
   - component: {fileID: 1692613839}
   - component: {fileID: 1692613842}
-  m_Layer: 0
+  m_Layer: 8
   m_Name: Plane
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -4589,7 +4590,7 @@ GameObject:
   - component: {fileID: 1803483104}
   - component: {fileID: 1803483103}
   - component: {fileID: 1803483102}
-  m_Layer: 0
+  m_Layer: 7
   m_Name: Wicket (1)
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -4937,7 +4938,7 @@ GameObject:
   - component: {fileID: 1980786146}
   - component: {fileID: 1980786145}
   - component: {fileID: 1980786144}
-  m_Layer: 0
+  m_Layer: 7
   m_Name: Wicket
   m_TagString: Untagged
   m_Icon: {fileID: 0}
