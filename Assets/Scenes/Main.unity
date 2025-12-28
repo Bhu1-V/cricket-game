@@ -1475,7 +1475,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 273840604ba1b73478cde0633ecb5754, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  ballRadius: 0.1
+  ballRadius: 0.7
   groundLayer:
     serializedVersion: 2
     m_Bits: 64
@@ -1529,9 +1529,8 @@ MonoBehaviour:
   aroundTheWicketPos: {fileID: 651654290}
   isSwingDelivery: 1
   isOverTheWicket: 1
-  swingReleaseSpeed: 30
-  rawDirectionInput: 0
   spinReleaseSpeed: 18
+  rawDirectionInput: 0
   ballRadius: 0.1
   onBounceMarkerSet: {fileID: 11400000, guid: fb8d54c62c14b9642be16b56ff3aca41, type: 2}
   onStrengthValueSet: {fileID: 11400000, guid: f8a930111db1e6a44b618c553876e727, type: 2}

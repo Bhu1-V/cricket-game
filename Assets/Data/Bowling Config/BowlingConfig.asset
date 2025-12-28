@@ -13,11 +13,11 @@ MonoBehaviour:
   m_Name: BowlingConfig
   m_EditorClassIdentifier: 
   gravity: -9.81
-  maxBallSpeed: 35
+  maxBallSpeed: 62.9
   airDrag: 0.1
   pitchFriction: 0.8
   restitution: 0.753
-  maxSwingForce: 460.6
+  maxSwingForce: 519.7
   swingCurve:
     serializedVersion: 2
     m_Curve: []
